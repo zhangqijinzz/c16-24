@@ -49,4 +49,52 @@ describe('FrameSenseViewModel', () => {
     expect(vm.getSnapshot().document.image).not.toBeNull();
     expect(vm.getSnapshot().error).toContain('本地保存失败');
   });
+
+  it('updates a variant name and note', () => {
+    vm.loadDemo();
+    vm.saveVariant();
+    const id = vm.getSnapshot().document.variants[0].id;
+    vm.updateVariant(id, { name: '封面', note: '暖色调' });
+    const variant = vm.getSnapshot().document.variants[0];
+    expect(variant.name).toBe('封面');
+    expect(variant.note).toBe('暖色调');
+  });
+
+  it('duplicates a variant right after the source with a new id', () => {
+    vm.loadDemo();
+    vm.saveVariant();
+    const id = vm.getSnapshot().document.variants[0].id;
+    vm.updateVariant(id, { name: '封面', note: '备用' });
+    vm.duplicateVariant(id);
+    const variants = vm.getSnapshot().document.variants;
+    expect(variants).toHaveLength(2);
+    expect(variants[0].id).toBe(id);
+    expect(variants[1].id).not.toBe(id);
+    expect(variants[1].name).toBe('封面');
+    expect(variants[1].note).toBe('备用');
+    expect(variants[1].x).toBe(variants[0].x);
+  });
+
+  it('moves a variant up and down', () => {
+    vm.loadDemo();
+    vm.saveVariant();
+    vm.saveVariant();
+    vm.saveVariant();
+    const [a, b, c] = vm.getSnapshot().document.variants;
+    vm.moveVariant(b.id, 'up');
+    expect(vm.getSnapshot().document.variants.map((item) => item.id)).toEqual([b.id, a.id, c.id]);
+    vm.moveVariant(b.id, 'down');
+    expect(vm.getSnapshot().document.variants.map((item) => item.id)).toEqual([a.id, b.id, c.id]);
+  });
+
+  it('does not move the first item up or the last item down', () => {
+    vm.loadDemo();
+    vm.saveVariant();
+    vm.saveVariant();
+    const [a, b] = vm.getSnapshot().document.variants;
+    vm.moveVariant(a.id, 'up');
+    expect(vm.getSnapshot().document.variants.map((item) => item.id)).toEqual([a.id, b.id]);
+    vm.moveVariant(b.id, 'down');
+    expect(vm.getSnapshot().document.variants.map((item) => item.id)).toEqual([a.id, b.id]);
+  });
 });

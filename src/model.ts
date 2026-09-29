@@ -16,6 +16,10 @@ export interface CropVariant {
   width: number;
   height: number;
   ratio: string;
+  /** 自定义名称；为空或缺失时兜底显示「方案 NN」 */
+  name?: string;
+  /** 简短备注，仅用于展示区分 */
+  note?: string;
 }
 
 export interface FrameDocument {
