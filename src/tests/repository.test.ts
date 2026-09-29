@@ -26,4 +26,19 @@ describe('LocalFrameRepository', () => {
     expect(document.image).toBeNull();
     expect(document.variants).toEqual([]);
   });
+
+  it('loads legacy documents whose variants have no names, preserving order', () => {
+    const storage = new MemoryStorage();
+    storage.value = JSON.stringify({
+      ...structuredClone(EMPTY_DOCUMENT),
+      variants: [
+        { id: 'first', x: 0, y: 0, width: 0.5, height: 0.5, ratio: '1:1' },
+        { id: 'second', x: 0.1, y: 0.2, width: 0.4, height: 0.4, ratio: 'free' },
+      ],
+    });
+    const document = new LocalFrameRepository(storage).load();
+    expect(document.variants.map((variant) => variant.id)).toEqual(['first', 'second']);
+    expect(document.variants[0].name).toBeUndefined();
+    expect(document.variants[1].ratio).toBe('free');
+  });
 });

@@ -16,6 +16,8 @@ export interface CropVariant {
   width: number;
   height: number;
   ratio: string;
+  name?: string;
+  note?: string;
 }
 
 export interface FrameDocument {
@@ -34,6 +36,8 @@ export interface ViewState {
   notice: string;
   error: string | null;
 }
+
+export const MAX_VARIANTS = 8;
 
 export const DEFAULT_CROP: CropVariant = {
   id: 'current',

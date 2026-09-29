@@ -49,4 +49,78 @@ describe('FrameSenseViewModel', () => {
     expect(vm.getSnapshot().document.image).not.toBeNull();
     expect(vm.getSnapshot().error).toContain('本地保存失败');
   });
+
+  it('saves variants with custom names and notes, trimming blanks away', () => {
+    vm.loadDemo();
+    vm.saveVariant(' 封面 ', '给首页用');
+    vm.saveVariant('   ', '');
+    const [named, unnamed] = vm.getSnapshot().document.variants;
+    expect(named.name).toBe('封面');
+    expect(named.note).toBe('给首页用');
+    expect(unnamed.name).toBeUndefined();
+    expect(unnamed.note).toBeUndefined();
+    expect(repository.document.variants).toHaveLength(2);
+  });
+
+  it('duplicates a variant right after the source with a copy name', () => {
+    vm.loadDemo();
+    vm.saveVariant('封面', '定稿前');
+    vm.saveVariant('备选', '');
+    const source = vm.getSnapshot().document.variants[0];
+    vm.duplicateVariant(source.id);
+    const variants = vm.getSnapshot().document.variants;
+    expect(variants).toHaveLength(3);
+    expect(variants[0].id).toBe(source.id);
+    expect(variants[1].name).toBe('封面 副本');
+    expect(variants[1].note).toBe('定稿前');
+    expect(variants[1].id).not.toBe(source.id);
+    expect(variants[2].name).toBe('备选');
+  });
+
+  it('moves variants without disturbing the rest of the order', () => {
+    vm.loadDemo();
+    vm.saveVariant('一', '');
+    vm.saveVariant('二', '');
+    vm.saveVariant('三', '');
+    const third = vm.getSnapshot().document.variants[2];
+    vm.moveVariant(third.id, -1);
+    expect(vm.getSnapshot().document.variants.map((variant) => variant.name)).toEqual(['一', '三', '二']);
+    vm.moveVariant(third.id, -1);
+    expect(vm.getSnapshot().document.variants.map((variant) => variant.name)).toEqual(['三', '一', '二']);
+    vm.moveVariant(third.id, -1);
+    expect(vm.getSnapshot().document.variants.map((variant) => variant.name)).toEqual(['三', '一', '二']);
+    expect(repository.document.variants.map((variant) => variant.name)).toEqual(['三', '一', '二']);
+  });
+
+  it('updates name and note, clearing fields left blank', () => {
+    vm.loadDemo();
+    vm.saveVariant('旧名', '旧备注');
+    const id = vm.getSnapshot().document.variants[0].id;
+    vm.updateVariantMeta(id, '  ', '新备注');
+    const variant = vm.getSnapshot().document.variants[0];
+    expect(variant.name).toBeUndefined();
+    expect(variant.note).toBe('新备注');
+  });
+
+  it('removes a variant and keeps the remaining order', () => {
+    vm.loadDemo();
+    vm.saveVariant('甲', '');
+    vm.saveVariant('乙', '');
+    const id = vm.getSnapshot().document.variants[0].id;
+    vm.removeVariant(id);
+    const variants = vm.getSnapshot().document.variants;
+    expect(variants).toHaveLength(1);
+    expect(variants[0].name).toBe('乙');
+  });
+
+  it('refuses to save or duplicate beyond the cap instead of dropping variants', () => {
+    vm.loadDemo();
+    for (let index = 0; index < 8; index += 1) vm.saveVariant(`方案${index}`, '');
+    vm.saveVariant('溢出', '');
+    expect(vm.getSnapshot().document.variants).toHaveLength(8);
+    expect(vm.getSnapshot().document.variants.some((variant) => variant.name === '溢出')).toBe(false);
+    expect(vm.getSnapshot().notice).toContain('已满');
+    vm.duplicateVariant(vm.getSnapshot().document.variants[0].id);
+    expect(vm.getSnapshot().document.variants).toHaveLength(8);
+  });
 });

@@ -50,6 +50,43 @@ export function makeVariant(crop: CropVariant, id: string): CropVariant {
   return { ...normalizeCrop(crop), id };
 }
 
+export function variantLabels(variants: CropVariant[]): string[] {
+  const seen = new Map<string, number>();
+  return variants.map((variant, index) => {
+    const name = variant.name?.trim() ?? '';
+    if (name === '') return `方案 ${String(index + 1).padStart(2, '0')}`;
+    const count = (seen.get(name) ?? 0) + 1;
+    seen.set(name, count);
+    return count === 1 ? name : `${name}（${count}）`;
+  });
+}
+
+export function normalizeVariant(value: unknown, index: number): CropVariant | null {
+  if (!value || typeof value !== 'object') return null;
+  const candidate = value as Partial<CropVariant>;
+  const numbers = [candidate.x, candidate.y, candidate.width, candidate.height];
+  if (!numbers.every((item) => typeof item === 'number' && Number.isFinite(item))) return null;
+  const [x, y, width, height] = numbers as [number, number, number, number];
+  const id = typeof candidate.id === 'string' && candidate.id !== '' ? candidate.id : `variant-legacy-${index}`;
+  return normalizeCrop({
+    id,
+    x,
+    y,
+    width,
+    height,
+    ratio: typeof candidate.ratio === 'string' ? candidate.ratio : 'free',
+    ...(typeof candidate.name === 'string' ? { name: candidate.name } : {}),
+    ...(typeof candidate.note === 'string' ? { note: candidate.note } : {}),
+  });
+}
+
+export function normalizeDocument(document: FrameDocument): FrameDocument {
+  const variants = document.variants
+    .map((variant, index) => normalizeVariant(variant, index))
+    .filter((variant): variant is CropVariant => variant !== null);
+  return { ...document, variants };
+}
+
 export function isFrameDocument(value: unknown): value is FrameDocument {
   if (!value || typeof value !== 'object') return false;
   const candidate = value as Partial<FrameDocument>;

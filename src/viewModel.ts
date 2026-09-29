@@ -1,6 +1,6 @@
 import { useState, useSyncExternalStore } from 'react';
-import { cropForRatio, makeVariant, moveCrop, resizeCrop } from './domain';
-import { EMPTY_DOCUMENT, type FrameDocument, type GuideKey, type Ratio, type ViewState } from './model';
+import { cropForRatio, makeVariant, moveCrop, resizeCrop, variantLabels } from './domain';
+import { EMPTY_DOCUMENT, MAX_VARIANTS, type CropVariant, type FrameDocument, type GuideKey, type Ratio, type ViewState } from './model';
 import type { FrameRepository } from './repository';
 import type { ImageService } from './service';
 
@@ -9,6 +9,7 @@ type Listener = () => void;
 export class FrameSenseViewModel {
   private state: ViewState = { phase: 'loading', document: structuredClone(EMPTY_DOCUMENT), compareOpen: false, notice: '', error: null };
   private readonly listeners = new Set<Listener>();
+  private idSequence = 0;
 
   constructor(private readonly repository: FrameRepository, private readonly imageService: ImageService) {}
 
@@ -82,17 +83,89 @@ export class FrameSenseViewModel {
     this.persist({ ...this.state.document, subject: { x: Math.min(1, Math.max(0, x)), y: Math.min(1, Math.max(0, y)) } }, '主体标记已更新。');
   }
 
-  saveVariant(): void {
-    const id = `variant-${Date.now()}`;
-    const variant = makeVariant(this.state.document.crop, id);
-    const document = { ...this.state.document, variants: [...this.state.document.variants, variant].slice(-8) };
-    this.persist(document, `已保存裁切方案 ${document.variants.length}。`);
+  private nextVariantId(): string {
+    this.idSequence += 1;
+    return `variant-${Date.now()}-${this.idSequence}`;
+  }
+
+  saveVariant(name = '', note = ''): void {
+    const { variants } = this.state.document;
+    if (variants.length >= MAX_VARIANTS) {
+      this.patch({ notice: `方案已满 ${MAX_VARIANTS} 个，请先删除不再需要的方案。` });
+      return;
+    }
+    const variant = makeVariant(this.state.document.crop, this.nextVariantId());
+    const trimmedName = name.trim();
+    const trimmedNote = note.trim();
+    if (trimmedName) variant.name = trimmedName;
+    else delete variant.name;
+    if (trimmedNote) variant.note = trimmedNote;
+    else delete variant.note;
+    const next = [...variants, variant];
+    const document = { ...this.state.document, variants: next };
+    this.persist(document, `已保存「${variantLabels(next)[next.length - 1]}」。`);
   }
 
   selectVariant(id: string): void {
-    const variant = this.state.document.variants.find((item) => item.id === id);
-    if (!variant) return;
-    this.persist({ ...this.state.document, crop: { ...variant, id: 'current' } }, '已切换到保存的裁切方案。');
+    const index = this.state.document.variants.findIndex((item) => item.id === id);
+    if (index < 0) return;
+    const variant = this.state.document.variants[index];
+    const label = variantLabels(this.state.document.variants)[index];
+    this.persist({ ...this.state.document, crop: { ...variant, id: 'current' } }, `已切换到「${label}」。`);
+  }
+
+  updateVariantMeta(id: string, name: string, note: string): void {
+    if (!this.state.document.variants.some((variant) => variant.id === id)) return;
+    const variants = this.state.document.variants.map((variant) => {
+      if (variant.id !== id) return variant;
+      const next: CropVariant = { ...variant };
+      const trimmedName = name.trim();
+      const trimmedNote = note.trim();
+      if (trimmedName) next.name = trimmedName;
+      else delete next.name;
+      if (trimmedNote) next.note = trimmedNote;
+      else delete next.note;
+      return next;
+    });
+    this.persist({ ...this.state.document, variants }, '方案信息已更新。');
+  }
+
+  duplicateVariant(id: string): void {
+    const { variants } = this.state.document;
+    const index = variants.findIndex((variant) => variant.id === id);
+    if (index < 0) return;
+    if (variants.length >= MAX_VARIANTS) {
+      this.patch({ notice: `方案已满 ${MAX_VARIANTS} 个，请先删除不再需要的方案。` });
+      return;
+    }
+    const source = variants[index];
+    const copy: CropVariant = { ...source, id: this.nextVariantId() };
+    const sourceName = source.name?.trim() ?? '';
+    if (sourceName) copy.name = `${sourceName} 副本`;
+    else delete copy.name;
+    const next = [...variants.slice(0, index + 1), copy, ...variants.slice(index + 1)];
+    const label = variantLabels(variants)[index];
+    this.persist({ ...this.state.document, variants: next }, `已复制「${label}」，副本排在原方案之后。`);
+  }
+
+  moveVariant(id: string, delta: number): void {
+    const variants = [...this.state.document.variants];
+    const index = variants.findIndex((variant) => variant.id === id);
+    const target = index + delta;
+    if (index < 0 || target < 0 || target >= variants.length) return;
+    const [moved] = variants.splice(index, 1);
+    variants.splice(target, 0, moved);
+    const label = variantLabels(variants)[target];
+    this.persist({ ...this.state.document, variants }, `「${label}」已移到第 ${target + 1} 位。`);
+  }
+
+  removeVariant(id: string): void {
+    const { variants } = this.state.document;
+    const index = variants.findIndex((variant) => variant.id === id);
+    if (index < 0) return;
+    const label = variantLabels(variants)[index];
+    const next = variants.filter((variant) => variant.id !== id);
+    this.persist({ ...this.state.document, variants: next }, `已删除「${label}」。`);
   }
 
   toggleCompare(): void {
